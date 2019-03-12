@@ -19,7 +19,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Error(err)
+		}
+	}()
 
 	producer, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
@@ -27,33 +31,37 @@ func main() {
 	}
 
 	go func() {
-		defer producer.Close()
+		defer func() {
+			if err := producer.Close(); err != nil {
+				log.Error(err)
+			}
+		}()
 
 		for i := 0; i < 10; i++ {
 			msg := &sarama.ProducerMessage{
 				Topic: topic,
-				Key: sarama.StringEncoder(fmt.Sprintf("async-sarama-%d", i)),
+				Key:   sarama.StringEncoder(fmt.Sprintf("async-sarama-%d", i)),
 				Value: sarama.StringEncoder("hi"),
 			}
 			producer.Input() <- msg
 		}
 	}()
 
-	successesDone := false
-	errorsDone := false
-	for !successesDone && !errorsDone {
+	successesCh := producer.Successes()
+	errorsCh := producer.Errors()
+	for successesCh != nil && errorsCh != nil {
 		select {
-		case msg, ok := <-producer.Successes():
+		case msg, ok := <-successesCh:
 			if ok {
 				log.Infof("%s success", msg.Key)
 			} else {
-				successesDone = true
+				successesCh = nil
 			}
-		case msg, ok := <-producer.Errors():
+		case msg, ok := <-errorsCh:
 			if ok {
 				log.Infof("%s error - %v", msg.Msg.Key, msg.Err)
 			} else {
-				errorsDone = true
+				errorsCh = nil
 			}
 		}
 	}

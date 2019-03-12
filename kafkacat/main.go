@@ -14,13 +14,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Error(err)
+		}
+	}()
 
 	consumer, err := sarama.NewConsumerFromClient(client)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer consumer.Close()
+	defer func() {
+		if err := consumer.Close(); err != nil {
+			log.Error(err)
+		}
+	}()
 
 	partitions, err := consumer.Partitions(topic)
 	if err != nil {
@@ -37,7 +45,11 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			defer pc.Close()
+			defer func() {
+				if err := pc.Close(); err != nil {
+					log.Error(err)
+				}
+			}()
 
 			log.Infof("consuming %s:%d", topic, p)
 			for msg := range pc.Messages() {
